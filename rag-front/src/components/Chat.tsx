@@ -10,6 +10,7 @@ interface Message {
   role: "user" | "bot";
   text: string;
   sources?: Source[];
+  tool_used?: string;
 }
 
 interface HistoryMessage {
@@ -41,7 +42,7 @@ export default function Chat() {
     try {
       const data = await query(question, history);
 
-      setMessages((prev) => [...prev, { role: "bot", text: data.answer, sources: data.sources }]);
+      setMessages((prev) => [...prev, { role: "bot", text: data.answer, sources: data.sources, tool_used: data.tool_used }]);
 
       setHistory((prev) => {
         const updated = [
@@ -74,7 +75,13 @@ export default function Chat() {
         {messages.map((msg, i) => (
           <div key={i} className={`message ${msg.role}`}>
             <span className="bubble">{msg.text}</span>
-            {msg.sources && msg.sources.length > 0 && (
+            {msg.tool_used === "search_web" && (
+              <div className="sources">
+                <span className="sources-label">Fuente:</span>
+                <span className="source-tag web">Web</span>
+              </div>
+            )}
+            {!msg.tool_used && msg.sources && msg.sources.length > 0 && (
               <div className="sources">
                 <span className="sources-label">Fuentes:</span>
                 {[...new Set(msg.sources.map((s) => s.file))].map((file, j) => (

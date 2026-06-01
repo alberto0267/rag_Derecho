@@ -210,6 +210,11 @@ body {
   color: #a099d8;
 }
 
+.source-tag.web {
+  color: #4fa3e0;
+  border-color: #1a3a5c;
+}
+
 .source-tag em {
   color: #6e1b60;
   font-style: normal;

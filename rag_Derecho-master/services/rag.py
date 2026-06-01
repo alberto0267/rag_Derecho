@@ -1,5 +1,6 @@
 from openai import OpenAI
 from db import get_connection
+from services.tools import TOOLS, execute_tool
 
 client = OpenAI()
 
@@ -42,20 +43,52 @@ def ask(question: str, history: list) -> dict:
     chunks = search(question, history)
     context = "\n\n---\n\n".join([row[0] for row in chunks])
 
-    system_prompt = f"""Responde usando SOLO el siguiente contexto.
-Si la respuesta no está en el contexto, di exactamente: "No tengo esa información en los documentos."
+    system_prompt = f"""Responde ÚNICAMENTE usando el contexto de documentos internos proporcionado o las herramientas disponibles.
+NUNCA uses tu conocimiento de entrenamiento para responder.
+Si la información no está en el contexto, DEBES usar la herramienta search_web.
 
 Contexto:
 {context}"""
 
     messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": question}]
 
+    # Primera llamada — GPT decide si responde o usa una tool
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=messages
+        messages=messages,
+        tools=TOOLS,
+        tool_choice="auto"
     )
 
+    message = response.choices[0].message
+
+    # Si GPT quiere usar una tool
+    tool_used = None
+
+    if message.tool_calls:
+        tool_call = message.tool_calls[0]
+        tool_used = tool_call.function.name
+        tool_result = execute_tool(tool_used, tool_call.function.arguments)
+
+        messages.append(message)
+        messages.append({
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "content": tool_result
+        })
+
+        final_response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages
+        )
+        answer = final_response.choices[0].message.content
+    else:
+        answer = message.content
+
+    sources = [] if tool_used else [{"file": row[1], "similarity": round(row[2], 2)} for row in chunks]
+
     return {
-        "answer": response.choices[0].message.content,
-        "sources": [{"file": row[1], "similarity": round(row[2], 2)} for row in chunks]
+        "answer": answer,
+        "sources": sources,
+        "tool_used": tool_used
     }

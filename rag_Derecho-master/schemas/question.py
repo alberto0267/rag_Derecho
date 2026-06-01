@@ -14,3 +14,4 @@ class Question(BaseModel):
 class Answer(BaseModel):
     answer: str
     sources: list[dict]
+    tool_used: str | None = None
