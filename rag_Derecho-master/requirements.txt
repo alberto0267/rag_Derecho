@@ -1,0 +1,8 @@
+openai==1.82.0
+psycopg[binary]
+python-dotenv==1.1.0
+pdfplumber
+fastapi
+uvicorn
+python-multipart
+python-docx

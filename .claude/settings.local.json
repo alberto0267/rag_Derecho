@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\Desarrollo\\\\Desktop\\\\Alberto\\\\rag_Derecho-master\\\\rag_Derecho-master\" -File | Where-Object {$_.Extension -in '.py', '.txt', '.md'})"
+    ]
+  }
+}
