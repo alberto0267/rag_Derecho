@@ -6,3 +6,7 @@ fastapi
 uvicorn
 python-multipart
 python-docx
+langchain
+langchain-openai
+langchain-postgres
+langchain-text-splitters
