@@ -1,13 +1,35 @@
+# Híbrido: extracción de texto propia (pdfplumber) para preservar tablas en Markdown,
+# LangChain para chunking semántico (RecursiveCharacterTextSplitter),
+# embeddings (OpenAIEmbeddings) y vectorstore (PGVector).
+from dotenv import load_dotenv
+load_dotenv()
+
 import io
+import os
 import pdfplumber
 import docx
-from openai import OpenAI
-from db import get_connection
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+from langchain_postgres import PGVector
 
-client = OpenAI()
+CONNECTION_STRING = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/ragdb").replace(
+    "postgresql://", "postgresql+psycopg://"
+)
 
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
+embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500,
+    chunk_overlap=50
+)
+
+
+def get_vectorstore() -> PGVector:
+    return PGVector(
+        embeddings=embeddings,
+        collection_name="documents",
+        connection=CONNECTION_STRING,
+    )
 
 
 def table_to_markdown(table):
@@ -79,51 +101,22 @@ def extract_text_docx(file_bytes: bytes) -> str:
     return "\n\n".join(parts)
 
 
-def extract_text(file_bytes: bytes, filename: str) -> str:
+def ingest_file(file_bytes: bytes, filename: str, user_id: str) -> int:
     ext = filename.lower().split(".")[-1]
+
     if ext == "pdf":
-        return extract_text_pdf(file_bytes)
-    elif ext in ("docx",):
-        return extract_text_docx(file_bytes)
-    return ""
+        text = extract_text_pdf(file_bytes)
+    elif ext == "docx":
+        text = extract_text_docx(file_bytes)
+    else:
+        return 0
 
-
-def chunk_text(text: str) -> list:
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + CHUNK_SIZE
-        chunks.append(text[start:end])
-        start += CHUNK_SIZE - CHUNK_OVERLAP
-    return chunks
-
-
-def get_embedding(text: str) -> list:
-    response = client.embeddings.create(
-        model="text-embedding-3-small",
-        input=text
+    chunks = splitter.create_documents(
+        texts=[text],
+        metadatas=[{"source": filename, "user_id": user_id}]
     )
-    return response.data[0].embedding
 
+    vectorstore = get_vectorstore()
+    vectorstore.add_documents(chunks)
 
-def ingest_file(file_bytes: bytes, filename: str) -> int:
-    text = extract_text(file_bytes, filename)
-    chunks = chunk_text(text)
-
-    conn = get_connection()
-    total = 0
-
-    with conn:
-        for chunk in chunks:
-            if not chunk.strip():
-                continue
-            embedding = get_embedding(chunk)
-            embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
-            conn.execute(
-                "INSERT INTO documents (content, source, embedding) VALUES (%s, %s, %s::vector)",
-                (chunk, filename, embedding_str)
-            )
-            total += 1
-
-    conn.close()
-    return total
+    return len(chunks)
